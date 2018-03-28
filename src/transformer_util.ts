@@ -250,29 +250,44 @@ function lastNodeWith(nodes: ts.Node[], predicate: (node: ts.Node) => boolean): 
  * state management after the caller is done changing a node.
  */
 export function visitNodeWithSynthesizedComments<T extends ts.Node>(
-    context: ts.TransformationContext, sourceFile: ts.SourceFile, node: T,
+    context: ts.TransformationContext, sourceFile: ts.SourceFile, original: T,
     visitor: (node: T) => T): T {
-  if (node.flags & ts.NodeFlags.Synthesized) {
-    return visitor(node);
+  let node: T;
+  if (original.flags & ts.NodeFlags.Synthesized) {
+    return visitor(original);
   }
-  if (node.kind === ts.SyntaxKind.Block) {
-    const block = node as ts.Node as ts.Block;
+  if (original.kind === ts.SyntaxKind.Block) {
+    const block = original as ts.Node as ts.Block;
     node = visitNodeStatementsWithSynthesizedComments(
-        context, sourceFile, node, block.statements,
+        context, sourceFile, original, block.statements,
         (node, stmts) => visitor(ts.updateBlock(block, stmts) as ts.Node as T));
-  } else if (node.kind === ts.SyntaxKind.SourceFile) {
+  } else if (original.kind === ts.SyntaxKind.SourceFile) {
     node = visitNodeStatementsWithSynthesizedComments(
-        context, sourceFile, node, sourceFile.statements,
+        context, sourceFile, original, sourceFile.statements,
         (node, stmts) => visitor(updateSourceFileNode(sourceFile, stmts) as ts.Node as T));
   } else {
     const fileContext = assertFileContext(context, sourceFile);
     const leadingLastCommentEnd =
-        synthesizeLeadingComments(sourceFile, node, fileContext.lastCommentEnd);
-    const trailingLastCommentEnd = synthesizeTrailingComments(sourceFile, node);
+        synthesizeLeadingComments(sourceFile, original, fileContext.lastCommentEnd);
+    const trailingLastCommentEnd = synthesizeTrailingComments(sourceFile, original);
     if (leadingLastCommentEnd !== -1) {
       fileContext.lastCommentEnd = leadingLastCommentEnd;
     }
-    node = visitor(node);
+    const leading = ts.getSyntheticLeadingComments(original) || [];
+    const leadingCommentStart = original.getFullStart();
+    const leadingCommentEnd = original.getEnd();
+    if (original.kind === ts.SyntaxKind.VariableStatement) debugger;
+    // const originalNode = node;
+    node = visitor(original);
+    if (ts.isVariableStatement(node))
+ {node =  ts.createPartiallyEmittedExpression(node as any) as any;
+  ts.setTextRange(node, original);
+}
+    // if (leadingCommentStart !== leadingCommentEnd) {
+    //   ts.setTextRange(node);
+    // }
+    for (const c of leading) ts.setTextRange(c, {pos: leadingCommentStart, end:leadingCommentEnd});
+    // ts.setOriginalNode(node, originalNode);
     // TODO is this the place to fix source mapping for generated comments?
     if (trailingLastCommentEnd !== -1) {
       fileContext.lastCommentEnd = trailingLastCommentEnd;
@@ -395,6 +410,8 @@ function visitNodeStatementsWithSynthesizedComments<T extends ts.Node>(
   const leading = synthesizeDetachedLeadingComments(sourceFile, node, statements);
   const trailing = synthesizeDetachedTrailingComments(sourceFile, node, statements);
   if (leading.commentStmt || trailing.commentStmt) {
+    if (leading.commentStmt) ts.setOriginalNode(leading.commentStmt, node);
+    if (trailing.commentStmt) ts.setOriginalNode(trailing.commentStmt, node);
     const newStatements: ts.Statement[] =
         [...arrayOf(leading.commentStmt), ...statements, ...arrayOf(trailing.commentStmt)];
     statements = ts.setTextRange(ts.createNodeArray(newStatements), {pos: -1, end: -1});

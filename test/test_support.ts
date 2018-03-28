@@ -10,12 +10,12 @@ import {assert, expect} from 'chai';
 import * as fs from 'fs';
 import * as glob from 'glob';
 import * as path from 'path';
-import {SourceMapConsumer} from 'source-map';
+import {SourceMapConsumer, SourceMapGenerator} from 'source-map';
 import * as ts from 'typescript';
 
 import * as cliSupport from '../src/cli_support';
 import * as es5processor from '../src/es5processor';
-import {BasicSourceMapConsumer, sourceMapTextToConsumer} from '../src/source_map_utils';
+import {BasicSourceMapConsumer, SourceMapGeneratorToJson, sourceMapTextToConsumer} from '../src/source_map_utils';
 import * as tsickle from '../src/tsickle';
 import {getCommonParentDirectory} from '../src/util';
 
@@ -241,7 +241,15 @@ export function assertSourceMapping(
     expectedPosition: {source: string, line?: number, column?: number}) {
   const {line, column} = getLineAndColumn(compiledJs, sourceSnippet);
   const originalPosition = sourceMap.originalPositionFor({line, column});
-  if (expectedPosition.line !== undefined) {
+  if (expectedPosition.line !== undefined && originalPosition.line !== expectedPosition.line) {
+    const smPath = path.join(process.env.TEMP || '/tmp', 'sourcemap.txt');
+    const srcPath = path.join(process.env.TEMP || '/tmp', 'source.js');
+    fs.writeFileSync(
+        smPath,
+        JSON.stringify(
+            (SourceMapGenerator.fromSourceMap(sourceMap) as SourceMapGeneratorToJson).toJSON()));
+    fs.writeFileSync(srcPath, compiledJs);
+    console.error('Source map failure, wrote out to', smPath, srcPath);
     expect(originalPosition.line, 'original line number').to.equal(expectedPosition.line);
   }
   if (expectedPosition.column !== undefined) {
