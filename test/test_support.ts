@@ -241,7 +241,7 @@ export function assertSourceMapping(
     expectedPosition: {source: string, line?: number, column?: number}) {
   const {line, column} = getLineAndColumn(compiledJs, sourceSnippet);
   const originalPosition = sourceMap.originalPositionFor({line, column});
-  if (expectedPosition.line !== undefined && originalPosition.line !== expectedPosition.line) {
+  if (expectedPosition.line !== undefined && expectedPosition.line !== originalPosition.line) {
     const smPath = path.join(process.env.TEMP || '/tmp', 'sourcemap.txt');
     const srcPath = path.join(process.env.TEMP || '/tmp', 'source.js');
     fs.writeFileSync(
@@ -249,7 +249,10 @@ export function assertSourceMapping(
         JSON.stringify(
             (SourceMapGenerator.fromSourceMap(sourceMap) as SourceMapGeneratorToJson).toJSON()));
     fs.writeFileSync(srcPath, compiledJs);
-    console.error('Source map failure, wrote out to', smPath, srcPath);
+    console.error(
+        'Source map failure, debugging files for ' +
+            'https://sokra.github.io/source-map-visualization/#custom are at',
+        smPath, srcPath);
     expect(originalPosition.line, 'original line number').to.equal(expectedPosition.line);
   }
   if (expectedPosition.column !== undefined) {
